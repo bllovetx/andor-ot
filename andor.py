@@ -2,9 +2,11 @@ from __future__ import print_function, unicode_literals, division
 
 from ctypes import (Structure, c_ulong, c_long, c_int, c_uint, c_float,
                     byref, oledll, create_string_buffer)
+from typing import Dict, Iterator, Tuple
 
 
-_error_codes = {
+
+_error_codes: Dict[int, str] = {
     20001: "DRV_ERROR_CODES",
     20002: "DRV_SUCCESS",
     20003: "DRV_VXNOTINSTALLED",
@@ -128,33 +130,78 @@ class Camera:
                 dev = abs(value - search)
         return best
 
-    def initialize(self, ini):
+    # # OT Encapsulation Functions
+
+    # # Function loaded from dll
+
+    def initialize(self, ini: str) -> None:     
+        """initialize This function will initialize the Andor SDK System. As part of the initialization procedure on 
+        some cameras (i.e. Classic, iStar and earlier iXion) the DLL will need access to a
+        DETECTOR.INI which contains information relating to the detector head, number pixels, 
+        readout speeds etc. If your system has multiple cameras then see the section Controlling 
+        multiple cameras
+
+        :param ini: Path to the directory containing the files
+        :type ini: str
+        """
         self._make_current()
         AndorError.check(_dll.Initialize(ini))
 
-    def shutdown(self):
+    def shutdown(self) -> None:
+        """shutdown This function will close the AndorMCD system down.
+        """        
         self._make_current()
         AndorError.check(_dll.ShutDown())
 
-    def get_capabilities(self):
+    def get_capabilities(self) -> AndorCapabilities:
+        """get_capabilities This function will fill in an AndorCapabilities structure with the capabilities associated with 
+        the connected camera. Before passing the address of an AndorCapabilites structure to the 
+        function the ulSize member of the structure should be set to the size of the structure. In 
+        C++ this can be done with the line:
+        caps->ulSize = sizeof(AndorCapabilities);
+        Individual capabilities are determined by examining certain bits and combinations of bits in 
+        the member variables of the AndorCapabilites structure. The next few pages contain a 
+        summary of the capabilities currently returned.
+
+        :return: an AndorCapabilities c-type structure filled with the capabilities associated with the connected camera
+        :rtype: AndorCapabilities
+        """        
         self._make_current()
         caps = AndorCapabilities()
         AndorError.check(_dll.GetCapabilities(byref(caps)))
         return caps
 
-    def get_detector(self):
+    def get_detector(self) -> Tuple[int, int]:
+        """get_detector This function returns the size of the detector in pixels. The horizontal axis is taken to be 
+        the axis parallel to the readout register.
+
+        :return: 
+            - x_pixels - number of horizontal pixels
+            - y_pixels - number of vertical pixels.
+        :rtype: Tuple[int, int]
+        """        
         self._make_current()
         x, y = c_long(), c_long()
         AndorError.check(_dll.GetDetector(byref(x), byref(y)))
         return x.value, y.value
 
     def get_head_model(self):
+        """get_head_model This function will retrieve the type of CCD attached to your system.
+
+        :return: [description]
+        :rtype: [type]
+        """      
         self._make_current()
         m = create_string_buffer(32)
         AndorError.check(_dll.GetHeadModel(m))
         return m.value
 
     def get_hardware_version(self):
+        """get_hardware_version This function returns the Hardware version information.
+
+        :return: [description]
+        :rtype: [type]
+        """        
         self._make_current()
         card = c_uint()
         flex10k = c_uint()
@@ -168,11 +215,37 @@ class Camera:
         return dict(card=card.value, flex10k=flex10k.value,
                     firmware=firmware.value, build=build.value)
 
-    def set_vs_amplitude(self, amplitude):
+    def set_vs_amplitude(self, amplitude: int):
+        """set_vs_amplitude If you choose a high readout speed (a low readout time), then you should also consider 
+        increasing the amplitude of the Vertical Clock Voltage. 
+        There are five levels of amplitude available for you to choose from:
+            - Normal
+            - +1
+            - +2
+            - +3 
+            - +4 
+        Exercise caution when increasing the amplitude of the vertical clock voltage, since higher 
+        clocking voltages may result in increased clock-induced charge (noise) in your signal. In 
+        general, only the very highest vertical clocking speeds are likely to benefit from an 
+        increased vertical clock voltage amplitude.
+
+        :param amplitude: desired Vertical Clock Voltage Amplitude
+            Valid values:
+                0 - Normal
+                1->4 - Increasing Clock voltage Amplitude
+        :type amplitude: int
+        """        
         self._make_current()
         AndorError.check(_dll.SetVSAmplitude(amplitude))
 
-    def get_vs_speeds(self):
+    def get_vs_speeds(self) -> Iterator[float]:
+        """get_vs_speeds As your Andor SDK system may be capable of operating at more than one vertical shift 
+        speed this function will return the actual speeds available. The value returned is in 
+        microseconds.
+
+        :yield: speed in microseconds per pixel shift.
+        :rtype: Iterator[float]
+        """        
         self._make_current()
         n = c_int()
         AndorError.check(_dll.GetNumberVSSpeeds(byref(n)))
