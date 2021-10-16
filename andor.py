@@ -7,6 +7,7 @@ from __future__ import print_function, unicode_literals, division, annotations
 
 from ctypes import (Structure, c_ulong, c_long, c_int, c_uint, c_float,
                     byref, oledll, create_string_buffer)
+import json
 import os
 # import sys
 from typing import Dict, Iterator, Tuple
@@ -155,6 +156,16 @@ class Camera:
 
     def __init__(self, handle):
         self.handle = handle
+        # Load json file
+        json_file_path = _this_dir + "\\AndorConfig.json"
+        assert os.path.exists(json_file_path), ("json config file does not exist, "
+            "please configure andor camera using 'AndorConfig.json' in the same "
+            "dir with this file")
+        try:
+            json_file = open(json_file_path)
+        except:
+            print("json config file failed to load")
+        self.camera_config = json.load(json_file)
 
     @staticmethod
     def _best_index(values, search):
