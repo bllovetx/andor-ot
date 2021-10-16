@@ -1,7 +1,14 @@
-from __future__ import print_function, unicode_literals, division
+"""This python api used by OT, USTC base on andorpy(https://github.com/quartiq/andorpy)
+
+All parameters should be configured in AndorConfig.json in the same dir with this file.
+"""
+
+from __future__ import print_function, unicode_literals, division, annotations
 
 from ctypes import (Structure, c_ulong, c_long, c_int, c_uint, c_float,
                     byref, oledll, create_string_buffer)
+import os
+# import sys
 from typing import Dict, Iterator, Tuple
 
 
@@ -47,6 +54,8 @@ _error_codes: Dict[int, str] = {
     20992: "DRV_NOT_AVAILABLE"
 }
 
+_this_dir = os.path.dirname(os.path.realpath(__file__))
+
 
 class AndorError(Exception):
     def __str__(self):
@@ -84,13 +93,21 @@ def load_dll(path):
     _dll = oledll.LoadLibrary(path)
 
 
-def get_available_cameras():
+def get_available_cameras() -> int:
+    """get_available_cameras This function returns the total number of Andor cameras currently installed. It is possible 
+    to call this function before any of the cameras are initialized.
+
+    :return: the number of cameras currently installed
+    :rtype: int
+    """    
     n = c_long()
+    assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
     AndorError.check(_dll.GetAvailableCameras(byref(n)))
     return n.value
 
 
 def set_current_camera(c):
+    assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
     AndorError.check(_dll.SetCurrentCamera(c))
 
 
@@ -106,13 +123,31 @@ def make_current(c):
 
 class Camera:
     @classmethod
-    def by_index(cls, i):
+    def by_index(cls, i: int) -> Camera:
+        """by_index This function returns a Camera Class instance init by the handle for the camera specified by cameraIndex. When multiple 
+        Andor cameras are installed the handle of each camera must be retrieved in order to 
+        select a camera using the SetCurrentCamera function. 
+        The number of cameras can be obtained using the GetAvailableCameras function.
+
+        :param i: index of any of the installed cameras.
+            Valid values    0 to NumberCameras-1 where NumberCameras is the value 
+                            returned by the GetAvailableCameras function.
+        :type i: int
+        :return: Camera instance init by handle of the camera.
+        :rtype: Camera
+        """        
         h = c_long()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetCameraHandle(i, byref(h)))
         return cls(h.value)
 
     @classmethod
-    def first(cls):
+    def first(cls) -> Camera:
+        """first return the Camera instance of first camera, see by_index()
+
+        :return: Camera instance of the first camera
+        :rtype: Camera
+        """        
         return cls.by_index(0)
 
     def _make_current(self):
@@ -141,16 +176,18 @@ class Camera:
         readout speeds etc. If your system has multiple cameras then see the section Controlling 
         multiple cameras
 
-        :param ini: Path to the directory containing the files
+        :param ini: Path to the directory containing the files DETECTOR.INI
         :type ini: str
         """
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.Initialize(ini))
 
     def shutdown(self) -> None:
         """shutdown This function will close the AndorMCD system down.
         """        
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.ShutDown())
 
     def get_capabilities(self) -> AndorCapabilities:
@@ -168,6 +205,7 @@ class Camera:
         """        
         self._make_current()
         caps = AndorCapabilities()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetCapabilities(byref(caps)))
         return caps
 
@@ -182,6 +220,7 @@ class Camera:
         """        
         self._make_current()
         x, y = c_long(), c_long()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetDetector(byref(x), byref(y)))
         return x.value, y.value
 
@@ -193,6 +232,7 @@ class Camera:
         """      
         self._make_current()
         m = create_string_buffer(32)
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetHeadModel(m))
         return m.value
 
@@ -209,6 +249,7 @@ class Camera:
         dummy2 = c_uint()
         firmware = c_uint()
         build = c_uint()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetHardwareVersion(
             byref(card), byref(flex10k), byref(dummy1), byref(dummy2),
             byref(firmware), byref(build)))
@@ -236,6 +277,7 @@ class Camera:
         :type amplitude: int
         """        
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetVSAmplitude(amplitude))
 
     def get_vs_speeds(self) -> Iterator[float]:
@@ -248,6 +290,7 @@ class Camera:
         """        
         self._make_current()
         n = c_int()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetNumberVSSpeeds(byref(n)))
         speed = c_float()
         for i in range(n.value):
@@ -259,27 +302,32 @@ class Camera:
             speeds = self.get_vs_speeds()
             speed = self._best_index(speeds, speed)
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetVSSpeed(speed))
 
     def get_number_of_adc_channels(self):
         self._make_current()
         n = c_int()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetNumberADChannels(byref(n)))
         return n.value
 
     def get_adc_channel(self):
         self._make_current()
         c = c_int()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetADCChannel(byref(c)))
         return c.value
 
     def set_adc_channel(self, channel):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetADChannel(channel))
         AndorError.check(_dll.SetOutputAmplifier(channel))
 
     def get_bit_depth(self, channel=None):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         if channel is None:
             return [self.get_bit_depth(c)
                     for c in range(self.get_number_of_adc_channels())]
@@ -291,10 +339,12 @@ class Camera:
     def set_fan_mode(self, mode):
         """0 = full, 1 = low, 2 = off"""
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetFanMode(mode))
 
     def cooler(self, on=True):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         if on:
             AndorError.check(_dll.CoolerON())
         else:
@@ -303,22 +353,26 @@ class Camera:
     def get_temperature_range(self):
         self._make_current()
         min, max = c_int(), c_int()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetTemperatureRange(byref(min), byref(max)))
         return min.value, max.value
 
     def get_temperature(self):
         self._make_current()
         t = c_int()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         status = _dll.GetTemperature(byref(t))
         return t.value, _error_codes[status]
 
     def set_temperature(self, t):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetTemperature(int(t)))
 
     def get_preamp_gains(self):
         self._make_current()
         n = c_int()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetNumberPreAmpGains(byref(n)))
         gain = c_float()
         for i in range(n.value):
@@ -330,38 +384,46 @@ class Camera:
             gains = self.get_preamp_gains()
             gain = self._best_index(gains, gain)
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetPreAmpGain(gain))
 
     def get_em_gain_range(self):
         self._make_current()
         low, high = c_int(), c_int()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetEMGainRange(byref(low), byref(high)))
         return low.value, high.value
 
     def set_em_gain_mode(self, mode):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetEMGainMode(mode))
 
     def set_emccd_gain(self, gain):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetEMCCDGain(gain))
 
     def get_status(self):
         self._make_current()
         state = c_int()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetStatus(byref(state)))
         return state.value
 
     def start_acquisition(self):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.StartAcquisition())
 
     def abort_acquisition(self):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.AbortAcquisition())
 
     def set_shutter(self, a, b, c, d):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetShutter(a, b, c, d))
 
     def shutter(self, open=True):
@@ -372,12 +434,14 @@ class Camera:
         exposure = c_float()
         accumulate = c_float()
         kinetic = c_float()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetAcquisitionTimings(
             byref(exposure), byref(accumulate), byref(kinetic)))
         return exposure.value, accumulate.value, kinetic.value
 
     def set_acquisition_mode(self, frames=0):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         if frames == 1:
             AndorError.check(_dll.SetAcquisitionMode(1))
         elif frames > 1:
@@ -390,18 +454,22 @@ class Camera:
 
     def set_baseline_clamp(self, active=True):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetBaselineClamp(int(active)))
 
     def set_exposure_time(self, time):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetExposureTime(c_float(time)))
 
     def set_frame_transfer_mode(self, mode):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetFrameTransferMode(mode))
 
     def get_hs_speeds(self, channel=None):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         if channel is None:
             for channel in range(self.get_number_of_adc_channels()):
                 for _ in self.get_hs_speeds(channel):
@@ -419,14 +487,17 @@ class Camera:
             speeds = self.get_hs_speeds(self.get_adc_channel())
             speed = self._best_index(speeds, speed)
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetHSSpeed(0, speed))
 
     def set_kinetic_cycle_time(self, time):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetKineticCycleTime(c_float(time)))
 
     def set_read_mode(self, mode):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetReadMode(mode))
 
     def set_image(self, bin, roi):
@@ -435,6 +506,7 @@ class Camera:
         roi: (x1, x2, y1, y2)
         """
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetImage(bin[0], bin[1],
                                        roi[0], roi[1], roi[2], roi[3]))
         nx = (roi[1] - roi[0] + 1)//bin[0]
@@ -444,21 +516,25 @@ class Camera:
 
     def set_trigger_mode(self, mode):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetTriggerMode(mode))
 
     def set_fast_ext_trigger(self, mode):
         self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetFastExtTrigger(mode))
 
     def get_number_new_images(self):
         self._make_current()
         first, last = c_long(), c_long()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetNumberNewImages(byref(first), byref(last)))
         return first.value, last.value
 
     def get_oldest_image16(self):
         self._make_current()
         buffer = create_string_buffer(2*self.size)
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetOldestImage16(buffer, self.size))
         return buffer
 
@@ -476,6 +552,7 @@ class Camera:
             return
         buf = create_string_buffer(2*n*self.size)
         valid_first, valid_last = c_long(), c_long()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetImages16(
             first, last, buf, n*self.size,
             byref(valid_first), byref(valid_last)))
