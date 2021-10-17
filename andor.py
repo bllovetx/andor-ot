@@ -10,7 +10,7 @@ from ctypes import (Structure, c_ulong, c_long, c_int, c_uint, c_float,
 import json
 import os
 # import sys
-from typing import Dict, Iterator, Tuple
+from typing import TYPE_CHECKING, Dict, Iterator, Protocol, Tuple, Type, Union
 
 
 
@@ -55,7 +55,15 @@ _error_codes: Dict[int, str] = {
     20992: "DRV_NOT_AVAILABLE"
 }
 
-_this_dir = os.path.dirname(os.path.realpath(__file__))
+# From typing issue 182
+if TYPE_CHECKING:
+    class JSONArray(list[JSON], Protocol):  # type: ignore
+        __class__: Type[list[JSON]]  # type: ignore
+
+    class JSONObject(dict[str, JSON], Protocol):  # type: ignore
+        __class__: Type[dict[str, JSON]]  # type: ignore
+
+    JSON = Union[None, float, str, JSONArray, JSONObject]
 
 
 class AndorError(Exception):
@@ -86,9 +94,11 @@ class AndorCapabilities(Structure):
 
 
 _dll = None
+_this_dir = os.path.dirname(os.path.realpath(__file__))
 
 
-def load_dll(path):
+
+def load_dll(path: str):
     global _dll
     assert not _dll
     _dll = oledll.LoadLibrary(path)
@@ -182,6 +192,48 @@ class Camera:
         return best
 
     # # OT Encapsulation Functions
+    @classmethod
+    def by_serial_number(cls, using_threading: bool = True) -> Camera:
+        """by_serial_number This method is designed to automatically find target camera
+        with serial number from json. 'with_json' is a must and by default 'using_threading'
+        is enabled.
+
+        :param using_threading: whether to use threading, see __init__ for detail, defaults to True
+        :type using_threading: bool, optional
+        :return: camera specified by serial number if found
+        :rtype: Camera
+        """        
+        # TODO:
+        # get available camera
+        # load json to get target serial number
+        # traverse to check
+        # if found: return camera, log/check model
+        # not found: assert camera not found and log serial number list
+
+    # # OT Assist Functions
+    @staticmethod
+    def _load_config_from_json() -> JSONObject:
+        """_load_config_from_json Load json configuration from this_dir/AndorConfig.json
+
+        :return: JSON configuration
+        :rtype: JSON
+        """
+        global _this_dir 
+        json_file_path = _this_dir + "\\AndorConfig.json"
+        assert os.path.exists(json_file_path), ("json config file does not exist, "
+            "please configure Andor camera using 'AndorConfig.json' in the same "
+            "dir with this file")
+        try:
+            json_file = open(json_file_path)
+        except:
+            print("json config file failed to load")
+        temp_config = json.load(json_file)
+        json_file.close()
+        return temp_config
+
+    def _iXon_ultra_888_config(self):
+        # check camera
+        pass
 
     # # Function loaded from dll
 
