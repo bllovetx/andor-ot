@@ -154,19 +154,23 @@ class Camera:
     def _make_current(self):
         make_current(self.handle)
 
-    def __init__(self, handle):
+    def __init__(
+        self, handle: int, 
+        with_json: bool = False, 
+        using_threading: bool = False, 
+        json_config: JSONObject = None
+    ):
         self.handle = handle
-        # Load json file
-        this_dir = os.path.dirname(os.path.realpath(__file__))
-        json_file_path = this_dir + "\\AndorConfig.json"
-        assert os.path.exists(json_file_path), ("json config file does not exist, "
-            "please configure andor camera using 'AndorConfig.json' in the same "
-            "dir with this file")
-        try:
-            json_file = open(json_file_path)
-        except:
-            print("json config file failed to load")
-        self.camera_config = json.load(json_file)
+        self.with_json = with_json
+        self.using_threading = using_threading
+        if self.with_json:
+            # Load json file if not loaded
+            self.json_config = self._load_config_from_json() if (json_config is None) else json_config
+            # config according to product model
+            assert self.json_config["productModel"] == "iXon Ultra 888", \
+                "Currently only iXon Ultra 888 is supported to config with json"
+            self._iXon_ultra_888_config()
+            
 
     @staticmethod
     def _best_index(values, search):
