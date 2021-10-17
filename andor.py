@@ -268,6 +268,19 @@ class Camera:
         return dict(card=card.value, flex10k=flex10k.value,
                     firmware=firmware.value, build=build.value)
 
+    def get_camera_serial_number(self) -> int:
+        """get_camera_serial_number This function will retrieve camera’s serial number
+
+        :return: serial number
+        :rtype: int
+        """        
+        self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
+        current_serial_number = c_int()
+        AndorError.check(_dll.GetCameraSerialNumber(byref(current_serial_number)))
+        return current_serial_number.value
+                    
+
     def set_vs_amplitude(self, amplitude: int):
         """set_vs_amplitude If you choose a high readout speed (a low readout time), then you should also consider 
         increasing the amplitude of the Vertical Clock Voltage. 
