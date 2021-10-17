@@ -1,6 +1,8 @@
 """This python api used by OT, USTC base on andorpy(https://github.com/quartiq/andorpy)
 
 All parameters should be configured in AndorConfig.json in the same dir with this file.
+
+Logging should be configured in __main__.py
 """
 
 from __future__ import print_function, unicode_literals, division, annotations
@@ -8,6 +10,7 @@ from __future__ import print_function, unicode_literals, division, annotations
 from ctypes import (Structure, c_ulong, c_long, c_int, c_uint, c_float,
                     byref, oledll, create_string_buffer)
 import json
+import logging
 import os
 # import sys
 from typing import TYPE_CHECKING, Dict, Iterator, Protocol, Tuple, Type, Union
@@ -92,7 +95,7 @@ class AndorCapabilities(Structure):
         ("ft_read_modes", c_ulong),
     ]
 
-
+_andor_logger = logging.getLogger(__name__)
 _dll = None
 _this_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -173,6 +176,8 @@ class Camera:
         self.handle = handle
         self.with_json = with_json
         self.using_threading = using_threading
+        global _andor_logger
+        self.logger = _andor_logger
         if self.with_json:
             # Load json file if not loaded
             self.json_config = self._load_config_from_json() if (json_config is None) else json_config
@@ -202,13 +207,33 @@ class Camera:
         :type using_threading: bool, optional
         :return: camera specified by serial number if found
         :rtype: Camera
-        """        
-        # TODO:
+        """  
+        global _andor_logger  
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         # get available camera
+        available_cameras_number = get_available_cameras()
+        _andor_logger.info(f"{available_cameras_number} cameras available now.")
+
         # load json to get target serial number
+        temp_json = cls._load_config_from_json()
+        target_serial_number = temp_json["serialNumber"]
+
         # traverse to check
-        # if found: return camera, log/check model
+        serial_number_list = []
+        for camera_index in range(available_cameras_number):
+            c_temp_handle = c_long()
+            AndorError.check(_dll.GetCameraHandle(camera_index, byref(c_temp_handle)))
+            temp_handle = c_temp_handle.value
+            temp_camera = Camera(temp_handle)
+            temp_serial_number = temp_camera.get_camera_serial_number() 
+            # if found: return camera, log/check model
+            if temp_serial_number == target_serial_number:
+                _andor_logger.info("target camera found, start to configure")
+                return Camera(temp_handle, with_json=True, using_threading=using_threading, json_config=temp_json)
+            serial_number_list.append(temp_serial_number)
         # not found: assert camera not found and log serial number list
+        _andor_logger.info(str(("current serial number list: ", serial_number_list)))
+        assert False, "serial number not found among currently available cameras, see log for serial number list"
 
     # # OT Assist Functions
     @staticmethod
