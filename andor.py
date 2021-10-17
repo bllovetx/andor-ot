@@ -157,7 +157,8 @@ class Camera:
     def __init__(self, handle):
         self.handle = handle
         # Load json file
-        json_file_path = _this_dir + "\\AndorConfig.json"
+        this_dir = os.path.dirname(os.path.realpath(__file__))
+        json_file_path = this_dir + "\\AndorConfig.json"
         assert os.path.exists(json_file_path), ("json config file does not exist, "
             "please configure andor camera using 'AndorConfig.json' in the same "
             "dir with this file")
