@@ -12,9 +12,11 @@ from ctypes import (Structure, c_ulong, c_long, c_int, c_uint, c_float,
 import json
 import logging
 import os
+from queue import Queue
 # import sys
+import threading
 from typing import TYPE_CHECKING, Dict, Iterator, Protocol, Tuple, Type, Union
-
+import warnings
 
 
 _error_codes: Dict[int, str] = {
@@ -173,14 +175,32 @@ class Camera:
         using_threading: bool = False, 
         json_config: JSONObject = None
     ):
-        self.handle = handle
-        self.with_json = with_json
-        self.using_threading = using_threading
+        self.handle: int = handle
+        # config
+        self.with_json: bool = with_json
+        self.using_threading: bool = using_threading
+        # logger
         global _andor_logger
-        self.logger = _andor_logger
+        self.logger: logging.Logger = _andor_logger
+        if using_threading:
+            ## data watcher
+            ## NOTE: using a boolean flag and lambda can also work with GIL,
+            ## but this is not guarranteed campared with threading.Event
+            # threading configurations
+            self.data_watcher_wait_time: float = 0.5 # s
+            # internal var
+            self._data_watcher: threading.Thread | None = None
+            self._data_pipeline: Queue = Queue()
+            self._data_watcher_stop: threading.Event = threading.Event()
+            self._data_watcher_working: threading.Event = threading.Event()
+            self._pipeline_lock: threading.Lock = threading.Lock()
+
         if self.with_json:
             # Load json file if not loaded
-            self.json_config = self._load_config_from_json() if (json_config is None) else json_config
+            self.json_config: JSONObject = self._load_config_from_json() if (json_config is None) else json_config
+            # store configurations that used frequently
+            self.read_out_mode = self.json_config["readoutMode"]
+            self.acquisition_mode = self.json_config["acquisitionMode"]
             # config according to product model
             assert self.json_config["productModel"] == "iXon Ultra 888", \
                 "Currently only iXon Ultra 888 is supported to config with json"
@@ -211,12 +231,12 @@ class Camera:
         global _andor_logger  
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         # get available camera
-        available_cameras_number = get_available_cameras()
+        available_cameras_number: int = get_available_cameras()
         _andor_logger.info(f"{available_cameras_number} cameras available now.")
 
         # load json to get target serial number
-        temp_json = cls._load_config_from_json()
-        target_serial_number = temp_json["serialNumber"]
+        temp_json: JSONObject = cls._load_config_from_json()
+        target_serial_number: int = temp_json["serialNumber"] # TODO:(xzqZeng@gmail) check int or str
 
         # traverse to check
         serial_number_list = []
@@ -235,6 +255,58 @@ class Camera:
         _andor_logger.info(str(("current serial number list: ", serial_number_list)))
         assert False, "serial number not found among currently available cameras, see log for serial number list"
 
+    def start_acquisition_with_watcher(self):
+        """start_acquisition_with_watcher Start acquisition and open a data
+        watcher to handle data from camera. Should be called after finish last acquisition
+        and stop data watcher either by waitting until acquisition finish or interrupt the
+        data watcher with 'Camera.stop_data_watcher'
+
+        To get data from pipeline managed by data watcher, call 'Camera.get_data_from_pipeline'
+        """        
+        # check states
+        ## program states
+        if self._data_watcher_working.is_set(): # data watcher is still working
+            warnings.warn(
+                "data watcher is still working, stopped in order to process "
+                "new acquisition.\n"
+                "In order to interrupt it, please call Camera.stop_data_watcher()"
+            )
+            self.stop_data_watcher()
+            assert not self._data_watcher_working.is_set(), "failed to stop data watcher"
+        if not self._data_pipeline.empty(): # data existing in pipeline
+            warnings.warn("pipeline is not empty, should check")
+        ## TODO: camera states
+
+        # init (pipeline?), events
+        self._data_watcher_stop.clear()
+
+        # start acquisition
+        self.start_acquisition()
+
+        # start data watcher
+        self._data_watcher = threading.Thread(target=self._watch_data)
+
+    def get_data_from_pipeline(self) -> str | None:
+        """get_data_from_pipeline get data from pipeline managed by data watcher.
+
+        :return: newest data not get by user, None if no data available in pipeline
+        :rtype: str | None
+        """        
+        # wait for pipeline to be available, raise assertion fail if time out
+        if not self._pipeline_lock.acquire(timeout=3):
+            assert False, "user failed to acquire pipeline's lock"
+        temp_data: str | None = None if self._data_pipeline.empty() else self._data_pipeline.get_nowait()
+        self._pipeline_lock.release()
+        return temp_data
+
+    def stop_data_watcher(self):
+        # set event(stop)
+        self._data_watcher_stop.set()
+        # join
+        self._data_watcher.join()
+        # set event(working)
+        self._data_watcher_working.clear()
+
     # # OT Assist Functions
     @staticmethod
     def _load_config_from_json() -> JSONObject:
@@ -243,7 +315,7 @@ class Camera:
         :return: JSON configuration
         :rtype: JSON
         """
-        global _this_dir 
+        global _this_dir, _andor_logger
         json_file_path = _this_dir + "\\AndorConfig.json"
         assert os.path.exists(json_file_path), ("json config file does not exist, "
             "please configure Andor camera using 'AndorConfig.json' in the same "
@@ -254,11 +326,91 @@ class Camera:
             print("json config file failed to load")
         temp_config = json.load(json_file)
         json_file.close()
+        _andor_logger.info("json file loaded successful.")
         return temp_config
 
     def _iXon_ultra_888_config(self):
         # check camera
-        pass
+        print("please check: - model type is " + self.get_head_model() + \
+            ", serial number is " + str(self.get_camera_serial_number()))
+        
+        # open cooler and fan
+        self.cooler(on=self.json_config["coolerOn"])
+        self.logger.info("cooler " + ("on" if self.json_config["coolerOn"] else "off"))
+        self.set_fan_mode(self.json_config["fanMode"])
+        ## TODO:(xzqZeng@gmail.com) watch temperature if "watchTemperature"
+
+        # set em gain
+        em_gain = self.json_config["emGain"]
+        em_gain_mode = self.json_config["emGainMode"]
+        em_adv = self.json_config["emAdvanced"]
+        if em_adv:
+            warnings.warn(("Using gains greater than 300 "
+                "is not generally recommended for most applications " 
+                "as this will reduce the lifespan of the EMCCD")
+            )
+        else:
+            assert em_gain <= 300, "enable em advanced feature to use large em gain"
+        self.set_em_advanced(1 if em_adv else 0)
+        self.set_em_gain_mode(em_gain_mode)
+            
+
+        # set acquisition mode and relative parameters
+        if self.acquisition_mode == "Single Scan":
+            self.set_acquisition_mode(1)
+            self.set_exposure_time(
+                self.json_config["acquisitionParameters"]["singleScan"]["exposureTime"]
+            )
+        ## TODO:(xzqZeng@gmail.com) add support to more acquisition modes
+
+        # set readout mode and relative parameters
+        if self.read_out_mode == "Image":
+            self.set_read_mode(4)
+            set_image_paras = self.json_config["readoutParameters"]["image"]["setImageParameters"]
+            self.set_image(
+                (set_image_paras["hbin"], set_image_paras["vbin"]),
+                (
+                    set_image_paras["hstart"], set_image_paras["hend"],
+                    set_image_paras["vstart"], set_image_paras["vend"]
+                )
+            )
+        ## TODO:(xzqZeng@gmail.com) add support to more readout modes
+
+        # set shutter mode
+        shutter_paras = self.json_config["setShutterParameters"]
+        self.set_shutter(
+            shutter_paras["typ"], shutter_paras["mode"],
+            shutter_paras["closingTime"], shutter_paras["openingTime"]
+        )
+
+        # set trigger mode
+        if self.json_config["triggerMode"] == "External":
+            self.set_trigger_mode(1)
+        ## TODO:(xzqZeng@gmail.com) add support to more trigger modes
+        
+        # set 
+
+        ## TODO:(xzqZeng@gmail.com) add more configuration, log info, check configuration 
+        
+    def _watch_data(self):
+        # init data watcher
+        self._data_watcher_working.set()
+        while not self._data_watcher_stop.wait(timeout=self.data_watcher_wait_time):
+            # send data from andor to pipeline if available
+            image_index_first, image_index_last = self.get_number_new_images()
+            image_in_circular_buffer = image_index_last - image_index_first
+            if self.acquisition_mode == "Single Scan": # can use dict of function instead
+                if image_in_circular_buffer:
+                    if not self._pipeline_lock.acquire(timeout=3):
+                        assert False, "Data watcher failed to acquire pipeline's lock"
+                    self._data_pipeline.put_nowait(self.get_oldest_image16)
+                    self._pipeline_lock.release()
+                    self._data_watcher_stop.set()
+        # stop watch (stop andor acquisition if needed and log/warn)
+        if _error_codes[self.get_status()] == "DRV_ACQUIRING": # still in acquiring
+            self.abort_acquisition()
+            self.logger.info("Acquisition aborted")
+        self._data_watcher_working.clear()
 
     # # Function loaded from dll
 
@@ -500,6 +652,22 @@ class Camera:
         AndorError.check(_dll.GetEMGainRange(byref(low), byref(high)))
         return low.value, high.value
 
+    def set_em_advanced(self, state: int):
+        """set_em_advanced This function turns on and off access to higher EM gain levels within the SDK. Typically, 
+        optimal signal to noise ratio and dynamic range is achieved between x1 to x300 EM Gain. 
+        Higher gains of > x300 are recommended for single photon counting only. Before using 
+        higher levels, you should ensure that light levels do not exceed the regime of tens of 
+        photons per pixel, otherwise accelerated ageing of the sensor can occur.
+
+        :param state: int state: Enables/Disables access to higher EM gain levels
+            - 1 – Enable access
+            - 0 – Disable access
+        :type state: int
+        """       
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
+        self._make_current()
+        AndorError.check(_dll.SetEMAdvanced(state))
+
     def set_em_gain_mode(self, mode):
         self._make_current()
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
@@ -535,7 +703,22 @@ class Camera:
     def shutter(self, open=True):
         self.set_shutter(0, 1 if open else 2, 0, 0)
 
-    def get_acquisition_timings(self):
+    def get_acquisition_timings(self) -> Tuple[float, float, float]:
+        """get_acquisition_timings This function will return the current “valid” acquisition timing information. This function 
+        should be used after all the acquisitions settings have been set, e.g. SetExposureTime, 
+        SetKineticCycleTime and SetReadMode etc. The values returned are the actual times 
+        used in subsequent acquisitions. 
+
+        This function is required as it is possible to set the exposure time to 20ms, accumulate 
+        cycle time to 30ms and then set the readout mode to full image. As it can take 250ms to 
+        read out an image it is not possible to have a cycle time of 30ms.
+
+        :return: 
+            - exposure: valid exposure time in seconds
+            - accumulate: valid accumulate cycle time in seconds
+            - kinetic: valid kinetic cycle time in seconds
+        :rtype: Tuple[float, float, float]
+        """        
         self._make_current()
         exposure = c_float()
         accumulate = c_float()
@@ -559,6 +742,13 @@ class Camera:
             AndorError.check(_dll.SetAcquisitionMode(5))
 
     def set_baseline_clamp(self, active=True):
+        """set_baseline_clamp This function turns on and off the baseline clamp functionality. With this feature enabled 
+        the baseline level of each scan in a kinetic series will be more consistent across the 
+        sequence.
+
+        :param active: Enables/Disables Baseline clamp functionality, defaults to True
+        :type active: bool, optional
+        """        
         self._make_current()
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetBaselineClamp(int(active)))
@@ -637,9 +827,14 @@ class Camera:
         AndorError.check(_dll.GetNumberNewImages(byref(first), byref(last)))
         return first.value, last.value
 
-    def get_oldest_image16(self):
+    def get_oldest_image16(self) -> str:
+        """get_oldest_image16 16-bit version of the GetOldestImage function.
+
+        :return: 16-bit image data in str format
+        :rtype: str
+        """        
         self._make_current()
-        buffer = create_string_buffer(2*self.size)
+        buffer: str = create_string_buffer(2*self.size)
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.GetOldestImage16(buffer, self.size))
         return buffer
