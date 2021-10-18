@@ -1,0 +1,135 @@
+{
+    "dllPath": "",
+    "iniPath": "",
+    "productModel": "iXon Ultra 888",
+    "serialNumber": 12859,
+    "fanMode": 0,
+    "coolerOn": true,
+    "targetTemperature": -60,
+    "watchTemperature": true,
+    "emGainMode": 0,
+    "emAdvanced": false,
+    "emGain": 100,
+    "readoutMode": "Image",
+    "readoutParameters": {
+        "fullVerticalBining": {
+            "modeName": "FVB",
+            "modeId": 0
+        },
+        "singleTrack": {
+            "modeName": "Single-Track",
+            "modeId": 3,
+            "singleTrackCenter": 128,
+            "singleTrackHeight": 20
+        },
+        "multiTrack": {
+            "modeName": "Multi-Track",
+            "modeId": 1,
+            "multiTrackNumber": 5,
+            "multiTrackHeight": 20,
+            "multiTrackOffset": 0
+        },
+        "randomTrack": {
+            "modeName": "Random-Track",
+            "modeId": 2,
+            "randomTrackNumber": 3,
+            "randomTrackPositionList": [
+                20,
+                30,
+                40,
+                40,
+                100,
+                150
+            ]
+        },
+        "image": {
+            "modeName": "Image",
+            "modeId": 4,
+            "setImageParameters": {
+                "hbin": 1,
+                "vbin": 1,
+                "hstart": 1,
+                "hend": 1024,
+                "vstart": 1,
+                "vend": 256
+            }
+        }
+    },
+    "setShutterParameters": {
+        "typ": 1,
+        "typList": {
+            "0": "Output TTL low signal to open shutter",
+            "1": "Output TTL high signal to open shutter"
+        },
+        "mode": 0,
+        "modeList": {
+            "0": "Fully Auto",
+            "1": "Permanently Open",
+            "2": "Permanently Closed",
+            "4": "Open for FVB series",
+            "5": "Open for any series"
+        },
+        "closingTime": 1,
+        "openingTime": 1
+    },
+    "acquisitionMode": "Single Scan",
+    "acquisitionParameters": {
+        "singleScan": {
+            "modeName": "Single Scan",
+            "modeId": 1,
+            "exposureTime": 1e-05
+        },
+        "accumulate": {
+            "modeName": "Accumulate",
+            "modeId": 2,
+            "exposureTime": 1e-05,
+            "numberOfAccumulations": 3,
+            "accumulateCycleTime": 1.5
+        },
+        "kineticSeries": {
+            "modeName": "Kinetic Series",
+            "modeId": 3,
+            "exposureTime": 1e-05,
+            "numberOfAccumulations": 3,
+            "accumulateCycleTime": 1.518,
+            "numberInKineticSeries": 4,
+            "kineticCycleTime": 3
+        },
+        "runTillAbort": {
+            "modeName": "Run Till Abort",
+            "modeId": 5,
+            "exposureTime": 1e-05,
+            "kineticCycleTime": 0
+        }
+    },
+    "triggerMode": "External",
+    "triggerParameters": {
+        "internal": {
+            "modeName": "Internal",
+            "modeId": 0
+        },
+        "external": {
+            "modeName": "External",
+            "modeId": 1
+        },
+        "externalStart": {
+            "modeName": "External Start",
+            "modeId": 6
+        },
+        "externalExposure": {
+            "modeName": "External Exposure",
+            "modeId": 7
+        }
+    },
+    "setHSSpeedParameters": {
+        "typ": 0,
+        "typList": {
+            "0": "electron multiplication/Conventional(clara)",
+            "1": "conventional/Extended NIR mode(clara)"
+        },
+        "index": 0
+    },
+    "setVSSpeedParameters": {
+        "index": 0
+    }
+}
