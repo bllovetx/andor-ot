@@ -5,8 +5,10 @@
     "serialNumber": 12859,
     "fanMode": 0,
     "coolerOn": true,
-    "targetTemperature": -60,
+    "targetTemperature": -80,
     "watchTemperature": true,
+    "tempTolerance": 5,
+    "setTempTimeOut": 10000,
     "emGainMode": 0,
     "emAdvanced": false,
     "emGain": 100,
@@ -131,5 +133,7 @@
     },
     "setVSSpeedParameters": {
         "index": 0
-    }
+    },
+    "dataWatcherWaitTime": 0.2,
+    "tempWatcherWatiTime": 30
 }
