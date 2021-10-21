@@ -185,15 +185,16 @@ class Camera:
         if using_threading:
             ## data watcher
             ## NOTE: using a boolean flag and lambda can also work with GIL,
-            ## but this is not guarranteed campared with threading.Event
+            ## but this is not guarranteed campared with threading.Event/Lock
             # threading configurations
             self.data_watcher_wait_time: float = 0.5 # s
             # internal var
             self._data_watcher: threading.Thread | None = None
-            self._data_pipeline: Queue = Queue()
-            self._data_watcher_stop: threading.Event = threading.Event()
-            self._data_watcher_working: threading.Event = threading.Event()
-            self._pipeline_lock: threading.Lock = threading.Lock()
+            self._data_pipeline: Queue = Queue() # data pushed by data_watcher from camera, get by user
+            self._data_watcher_stop: threading.Event = threading.Event() # flag event to stop data_watcher
+            self._data_watcher_working: threading.Event = threading.Event() # data_watcher's working state(True: working)
+            self._pipeline_lock: threading.Lock = threading.Lock()  # pipeline lock in case user and data_watcher 
+                                                                    # access pipeline at same time
 
         if self.with_json:
             # Load json file if not loaded
@@ -255,6 +256,7 @@ class Camera:
         _andor_logger.info(str(("current serial number list: ", serial_number_list)))
         assert False, "serial number not found among currently available cameras, see log for serial number list"
 
+    # ## 'using_threading' methods
     def start_acquisition_with_watcher(self):
         """start_acquisition_with_watcher Start acquisition and open a data
         watcher to handle data from camera. Should be called after finish last acquisition
@@ -263,6 +265,14 @@ class Camera:
 
         To get data from pipeline managed by data watcher, call 'Camera.get_data_from_pipeline'
         """        
+        # check setings
+        if not self.using_threading:
+            warnings.warn(
+                "This method uses threading, set 'using_threading' to True in order "
+                "to enable this method."
+            )
+            return
+
         # check states
         ## program states
         if self._data_watcher_working.is_set(): # data watcher is still working
@@ -292,6 +302,14 @@ class Camera:
         :return: newest data not get by user, None if no data available in pipeline
         :rtype: str | None
         """        
+        # check setings
+        if not self.using_threading:
+            warnings.warn(
+                "This method uses threading, set 'using_threading' to True in order "
+                "to enable this method."
+            )
+            return None
+
         # wait for pipeline to be available, raise assertion fail if time out
         if not self._pipeline_lock.acquire(timeout=3):
             assert False, "user failed to acquire pipeline's lock"
@@ -300,12 +318,31 @@ class Camera:
         return temp_data
 
     def stop_data_watcher(self):
+        # check setings
+        if not self.using_threading:
+            warnings.warn(
+                "This method uses threading, set 'using_threading' to True in order "
+                "to enable this method."
+            )
+            return
+
         # set event(stop)
         self._data_watcher_stop.set()
         # join
         self._data_watcher.join()
         # set event(working)
         self._data_watcher_working.clear()
+
+    def data_watcher_is_working(self) -> bool:
+        # check setings
+        if not self.using_threading:
+            warnings.warn(
+                "This method uses threading, set 'using_threading' to True in order "
+                "to enable this method."
+            )
+            return False
+            
+        return self._data_watcher_working.is_set()
 
     # # OT Assist Functions
     @staticmethod
