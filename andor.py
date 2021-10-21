@@ -15,6 +15,7 @@ import os
 from queue import Queue
 # import sys
 import threading
+import time
 from typing import TYPE_CHECKING, Dict, Iterator, Protocol, Tuple, Type, Union
 import warnings
 
@@ -182,12 +183,20 @@ class Camera:
         # logger
         global _andor_logger
         self.logger: logging.Logger = _andor_logger
+        if self.with_json:
+            # Load json file if not loaded
+            self.json_config: JSONObject = self._load_config_from_json() if (json_config is None) else json_config
+            # store configurations that used frequently
+            self.read_out_mode = self.json_config["readoutMode"]
+            self.acquisition_mode = self.json_config["acquisitionMode"]
+
         if using_threading:
-            ## data watcher
             ## NOTE: using a boolean flag and lambda can also work with GIL,
             ## but this is not guarranteed campared with threading.Event/Lock
+
+            ## data watcher
             # threading configurations
-            self.data_watcher_wait_time: float = 0.5 # s
+            self.data_watcher_wait_time: float = self.json_config["dataWatcherWaitTime"] if self.with_json else 0.2 # s
             # internal var
             self._data_watcher: threading.Thread | None = None
             self._data_pipeline: Queue = Queue() # data pushed by data_watcher from camera, get by user
@@ -196,12 +205,13 @@ class Camera:
             self._pipeline_lock: threading.Lock = threading.Lock()  # pipeline lock in case user and data_watcher 
                                                                     # access pipeline at same time
 
+            ## temp watcher
+            self.temp_watcher_wait_time: float = self.json_config["tempWatcherWaitTime"] if self.with_json else 30
+            self._temp_watcher: threading.Thread | None = None
+            self._temp_watcher_stop: threading.Event = threading.Event() # flag event to stop temp_wathcer
+            self._temp_watcher_working: threading.Event = threading.Event() # temp_wathcer's working status
+
         if self.with_json:
-            # Load json file if not loaded
-            self.json_config: JSONObject = self._load_config_from_json() if (json_config is None) else json_config
-            # store configurations that used frequently
-            self.read_out_mode = self.json_config["readoutMode"]
-            self.acquisition_mode = self.json_config["acquisitionMode"]
             # config according to product model
             assert self.json_config["productModel"] == "iXon Ultra 888", \
                 "Currently only iXon Ultra 888 is supported to config with json"
@@ -217,7 +227,7 @@ class Camera:
                 dev = abs(value - search)
         return best
 
-    # # OT Encapsulation Functions
+    # # OT Encapsulation Functions (NOTE: not tested without json)
     @classmethod
     def by_serial_number(cls, using_threading: bool = True) -> Camera:
         """by_serial_number This method is designed to automatically find target camera
@@ -256,7 +266,59 @@ class Camera:
         _andor_logger.info(str(("current serial number list: ", serial_number_list)))
         assert False, "serial number not found among currently available cameras, see log for serial number list"
 
-    # ## 'using_threading' methods
+    def set_temperature_until_reach(self, temperature: int, timeout: float = 0):
+        """set_temperature_until_reach set temperature and wait until reach target or time out
+
+        :param temperature: target temperature, neareat possible temperature will be choosen alternatively
+            if out of range 
+        :type temperature: int
+        :param timeout: time out in seconds, set to 0 will use json setting, if json not used, using default,
+            defaults to 0
+        :type timeout: float, optional
+        """        
+        # parse time out
+        temp_time_out: float = timeout
+        if temp_time_out == 0: # not set in para
+            if self.with_json: # get time out from json
+                temp_time_out = self.json_config["setTempTimeOut"]
+            else: # set to default value and warning
+                temp_time_out = 10000
+                warnings.warn("set temperature time out is not found, using " + str(temp_time_out))
+
+        # check cooler and target temperature
+        assert self.is_cooler_on, "must open cooler before call set_temperature_until_reach"
+        min_temp, max_temp = self.get_temperature_range()
+        target_temp: int = temperature
+        if temperature < min_temp:
+            target_temp = min_temp
+            warnings.warn("target temperature lower than min one, set to " + str(target_temp) + " instead.")
+        elif temperature > max_temp:
+            target_temp = max_temp
+            warnings.warn("target temperature higher than max one, set to " + str(target_temp) + " instead.")
+
+        # set and wait with time out
+        self.set_temperature(target_temp)
+        start_time: float = time.time()
+        cur_temp, cooling_status = self.get_temperature_f()
+        while cooling_status != "DRV_TEMP_STABILIZED" and (time.time() - start_time < temp_time_out):
+            time.sleep(5)
+            cur_temp, cooling_status = self.get_temperature_f()
+            self.logger.info("cooling: current temperature: %.2f, current status: %s" % (cur_temp, cooling_status))
+        if cooling_status != "DRV_TEMP_STABILIZED": 
+            # time out
+            warnings.warn(
+                "set temperature time out! current temperature: %.2f, current status: %s" 
+                % (cur_temp, cooling_status)
+            )
+        if abs(cur_temp - target_temp) > self.json_config["tempTolerance"]: 
+            # out of tolerance
+            warnings.warn(
+                "temperature out of tolerance! "
+                "current temperature: %.2f, current status: %s" 
+                % (cur_temp, cooling_status)
+            )
+
+    # ## 'using_threading' methods - data watcher
     def start_acquisition_with_watcher(self):
         """start_acquisition_with_watcher Start acquisition and open a data
         watcher to handle data from camera. Should be called after finish last acquisition
@@ -287,14 +349,12 @@ class Camera:
             warnings.warn("pipeline is not empty, should check")
         ## TODO: camera states
 
-        # init (pipeline?), events
+        # init (pipeline?), datawatcher
         self._data_watcher_stop.clear()
-
         # start acquisition
         self.start_acquisition()
-
         # start data watcher
-        self._data_watcher = threading.Thread(target=self._watch_data)
+        self._data_watcher = threading.Thread(target=self._watch_data, daemon=True)
 
     def get_data_from_pipeline(self) -> str | None:
         """get_data_from_pipeline get data from pipeline managed by data watcher.
@@ -344,6 +404,9 @@ class Camera:
             
         return self._data_watcher_working.is_set()
 
+    # ## 'using_threading' method - temp_watcher
+
+
     # # OT Assist Functions
     @staticmethod
     def _load_config_from_json() -> JSONObject:
@@ -360,7 +423,7 @@ class Camera:
         try:
             json_file = open(json_file_path)
         except:
-            print("json config file failed to load")
+            print("failed to open json config file")
         temp_config = json.load(json_file)
         json_file.close()
         _andor_logger.info("json file loaded successful.")
@@ -375,7 +438,17 @@ class Camera:
         self.cooler(on=self.json_config["coolerOn"])
         self.logger.info("cooler " + ("on" if self.json_config["coolerOn"] else "off"))
         self.set_fan_mode(self.json_config["fanMode"])
-        ## TODO:(xzqZeng@gmail.com) watch temperature if "watchTemperature"
+        self.set_temperature_until_reach(
+            self.json_config["targetTemperature"]
+        )
+        ## watch temperature if "watchTemperature"
+        if self.json_config["watchTemperature"]:
+            # start temp watcher
+            self._temp_watcher_stop.clear()
+            self._temp_watcher = threading.Thread(target=self._watch_temp, daemon=True)
+        else: 
+            # warning
+            warnings.warn("temp watcher not used!")
 
         # set em gain
         em_gain = self.json_config["emGain"]
@@ -432,6 +505,7 @@ class Camera:
     def _watch_data(self):
         # init data watcher
         self._data_watcher_working.set()
+        # check
         while not self._data_watcher_stop.wait(timeout=self.data_watcher_wait_time):
             # send data from andor to pipeline if available
             image_index_first, image_index_last = self.get_number_new_images()
@@ -448,6 +522,49 @@ class Camera:
             self.abort_acquisition()
             self.logger.info("Acquisition aborted")
         self._data_watcher_working.clear()
+
+    def _watch_temp(self):
+        # init temp watcher
+        self._temp_watcher_working.set()
+        # check
+        while not self._temp_watcher_stop.wait(timeout=self.temp_watcher_wait_time):
+            # check status and temp
+            cur_temp, cooling_status = self.get_temperature_f()
+            if cooling_status != "DRV_TEMP_STABILIZED": 
+                # system not stabilized
+                warnings.warn(
+                    "system temperature not stabilized! current temperature: %.2f, current status: %s" 
+                    % (cur_temp, cooling_status)
+                )
+            if abs(cur_temp - self.target) > self.json_config["tempTolerance"]: 
+                # out of tolerance
+                warnings.warn(
+                    "temperature out of tolerance! "
+                    "current temperature: %.2f, current status: %s" 
+                    % (cur_temp, cooling_status)
+                )
+            # log
+            self.logger.info(
+                "current temperature: %.2f, current status: %s" % (cur_temp, cooling_status)
+            )
+        # stop watch
+        warnings.warn(
+            "temp watcher stopping "
+            "check if you're neither reconfiguring nor closing camera"
+        )
+        self._temp_watcher_working.clear()
+
+    def _stop_temp_watcher(self):
+        """_stop_temp_watcher stop temperature watcher, this should be dangerous to be 
+        accessed by user
+        """        
+        # set event(stop)
+        self._data_watcher_stop.set()
+        # join
+        self._data_watcher.join()
+        # set event(working)
+        self._data_watcher_working.clear()
+
 
     # # Function loaded from dll
 
@@ -645,6 +762,20 @@ class Camera:
         else:
             AndorError.check(_dll.CoolerOFF())
 
+    def is_cooler_on(self) -> bool:
+        """is_cooler_on This function checks the status of the cooler.
+
+        :return: iCoolerStatus
+            - 0: cooler is off
+            - 1: cooler is on
+        :rtype: bool
+        """        
+        self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
+        cooler_status = c_int()
+        AndorError.check(_dll.IsCoolerOn(byref(cooler_status)))
+        return bool(cooler_status.value)
+
     def get_temperature_range(self):
         self._make_current()
         min, max = c_int(), c_int()
@@ -652,11 +783,52 @@ class Camera:
         AndorError.check(_dll.GetTemperatureRange(byref(min), byref(max)))
         return min.value, max.value
 
-    def get_temperature(self):
+    def get_temperature(self) -> Tuple[int, str]:
+        """get_temperature This function returns the temperature of the detector to the nearest degree. It also gives 
+        the status of cooling process.
+
+        :return: 
+            - temperature(int):  temperature of the detector
+            - status(str): status of cooling process
+                DRV_NOT_INITIALIZED     System not initialized.
+                DRV_ACQUIRING           Acquisition in progress.
+                DRV_ERROR_ACK           Unable to communicate with card.
+                DRV_TEMP_OFF            Temperature is OFF.
+                DRV_TEMP_STABILIZED     Temperature has stabilized at set point.
+                DRV_TEMP_NOT_REACHED    Temperature has not reached set point.
+                DRV_TEMP_DRIFT          Temperature had stabilized but has since drifted
+                DRV_TEMP_NOT_STABILIZED Temperature reached but not stabilized
+
+        :rtype: Tuple[int, str]
+        """        
         self._make_current()
         t = c_int()
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         status = _dll.GetTemperature(byref(t))
+        return t.value, _error_codes[status]
+
+    def get_temperature_f(self) -> Tuple[float, str]:
+        """get_temperature_f This function returns the temperature in degrees of the detector. It also gives the status of 
+        cooling process.
+
+        :return: 
+            - temperature(float):  temperature of the detector
+            - status(str): status of cooling process
+                DRV_NOT_INITIALIZED     System not initialized.
+                DRV_ACQUIRING           Acquisition in progress.
+                DRV_ERROR_ACK           Unable to communicate with card.
+                DRV_TEMP_OFF            Temperature is OFF.
+                DRV_TEMP_STABILIZED     Temperature has stabilized at set point.
+                DRV_TEMP_NOT_REACHED    Temperature has not reached set point.
+                DRV_TEMP_DRIFT          Temperature had stabilized but has since drifted
+                DRV_TEMP_NOT_STABILIZED Temperature reached but not stabilized
+
+        :rtype: Tuple[float, str]
+        """        
+        self._make_current()
+        t = c_float()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
+        status = _dll.GetTemperatureF(byref(t))
         return t.value, _error_codes[status]
 
     def set_temperature(self, t):
