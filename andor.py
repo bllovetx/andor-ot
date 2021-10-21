@@ -186,9 +186,9 @@ class Camera:
         if self.with_json:
             # Load json file if not loaded
             self.json_config: JSONObject = self._load_config_from_json() if (json_config is None) else json_config
-            # store configurations that used frequently
-            self.read_out_mode = self.json_config["readoutMode"]
-            self.acquisition_mode = self.json_config["acquisitionMode"]
+            # configurations that used frequently, not use until _config_according_to_json
+            self.read_out_mode: str = ""
+            self.acquisition_mode: str = ""
 
         if using_threading:
             ## NOTE: using a boolean flag and lambda can also work with GIL,
@@ -213,9 +213,7 @@ class Camera:
 
         if self.with_json:
             # config according to product model
-            assert self.json_config["productModel"] == "iXon Ultra 888", \
-                "Currently only iXon Ultra 888 is supported to config with json"
-            self._iXon_ultra_888_config()
+            self._config_according_to_json()
             
 
     @staticmethod
@@ -243,7 +241,7 @@ class Camera:
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         # get available camera
         available_cameras_number: int = get_available_cameras()
-        _andor_logger.info(f"{available_cameras_number} cameras available now.")
+        _andor_logger.info(f"Andor: {available_cameras_number} cameras available now.")
 
         # load json to get target serial number
         temp_json: JSONObject = cls._load_config_from_json()
@@ -259,11 +257,11 @@ class Camera:
             temp_serial_number = temp_camera.get_camera_serial_number() 
             # if found: return camera, log/check model
             if temp_serial_number == target_serial_number:
-                _andor_logger.info("target camera found, start to configure")
+                _andor_logger.info("Andor: target camera found, start to configure")
                 return Camera(temp_handle, with_json=True, using_threading=using_threading, json_config=temp_json)
             serial_number_list.append(temp_serial_number)
         # not found: assert camera not found and log serial number list
-        _andor_logger.info(str(("current serial number list: ", serial_number_list)))
+        _andor_logger.info(str(("Andor: current serial number list: ", serial_number_list)))
         assert False, "serial number not found among currently available cameras, see log for serial number list"
 
     def set_temperature_until_reach(self, temperature: int, timeout: float = 0):
@@ -303,7 +301,7 @@ class Camera:
         while cooling_status != "DRV_TEMP_STABILIZED" and (time.time() - start_time < temp_time_out):
             time.sleep(5)
             cur_temp, cooling_status = self.get_temperature_f()
-            self.logger.info("cooling: current temperature: %.2f, current status: %s" % (cur_temp, cooling_status))
+            self.logger.info("Andor: cooling: current temperature: %.2f, current status: %s" % (cur_temp, cooling_status))
         if cooling_status != "DRV_TEMP_STABILIZED": 
             # time out
             warnings.warn(
@@ -317,6 +315,57 @@ class Camera:
                 "current temperature: %.2f, current status: %s" 
                 % (cur_temp, cooling_status)
             )
+
+    def reconfig_json(self):
+        """reconfig_json reconfigure after json changed during camera running,
+        some config should not be changed see 'unchanged_list'
+        """        
+        # load new json check para can't change
+        temp_json = self._load_config_from_json()
+        unchanged_list = [
+            "dllPath",
+            "iniPath",
+            "productModel",
+            "serialNumber"
+        ]
+        para_unchanged: bool = True
+        changed_para_name: str = ""
+        for para_i in unchanged_list:
+            (changed_para_name, para_unchanged) = \
+                (changed_para_name, para_unchanged) \
+                if (temp_json[para_i] == self.json_config[para_i]) \
+                else (para_i, False)
+        if not para_unchanged:
+            warnings.warn(changed_para_name + " is not supported to reconfig")
+            return
+        # close threads if used and working
+        if self.using_threading:
+            if self._data_watcher_working.set():
+                self.stop_data_watcher()
+            if self._temp_watcher_working.set():
+                self._stop_temp_watcher()
+        # config before _config_according_to_json
+        self.data_watcher_wait_time: float = self.json_config["dataWatcherWaitTime"] if self.with_json else 0.2 # s
+        self.temp_watcher_wait_time: float = self.json_config["tempWatcherWaitTime"] if self.with_json else 30
+        # replace json and config according to json
+        self.json_config = temp_json
+        self._config_according_to_json()
+
+    def stop_camera(self):
+        assert False, "stop function not checked"
+        # close threads if used
+        if self.using_threading:
+            if self._data_watcher_working.set():
+                self.stop_data_watcher()
+            if self._temp_watcher_working.set():
+                self._stop_temp_watcher()
+            
+        # TODO:(xzqZeng@gmail.com) set temp (and wait)
+
+        # close hardware
+        self.shutdown()
+
+
 
     # ## 'using_threading' methods - data watcher
     def start_acquisition_with_watcher(self):
@@ -385,13 +434,16 @@ class Camera:
                 "to enable this method."
             )
             return
-
-        # set event(stop)
-        self._data_watcher_stop.set()
-        # join
-        self._data_watcher.join()
-        # set event(working)
-        self._data_watcher_working.clear()
+        if not self._data_watcher_stop.is_set():
+            # set event(stop)
+            self._data_watcher_stop.set()
+            # join
+            self._data_watcher.join()
+            # set event(working)
+            self._data_watcher_working.clear()
+            self.logger.info("Andor: data watcher stopped by enforcement")
+        else:
+            warnings.warn("data watcher already stoped")
 
     def data_watcher_is_working(self) -> bool:
         # check setings
@@ -426,8 +478,19 @@ class Camera:
             print("failed to open json config file")
         temp_config = json.load(json_file)
         json_file.close()
-        _andor_logger.info("json file loaded successful.")
+        _andor_logger.info("Andor: json file loaded successful.")
         return temp_config
+
+    def _config_according_to_json(self):
+        # in common
+        ## store configurations that used frequently
+        self.read_out_mode = self.json_config["readoutMode"]
+        self.acquisition_mode = self.json_config["acquisitionMode"]
+        # TODO:(xzqZeng@gmail.com): add other model
+        assert self.json_config["productModel"] == "iXon Ultra 888", \
+            "Currently only iXon Ultra 888 is supported to config with json"
+        self._iXon_ultra_888_config()
+
 
     def _iXon_ultra_888_config(self):
         # check camera
@@ -436,7 +499,7 @@ class Camera:
         
         # open cooler and fan
         self.cooler(on=self.json_config["coolerOn"])
-        self.logger.info("cooler " + ("on" if self.json_config["coolerOn"] else "off"))
+        self.logger.info("Andor: cooler " + ("on" if self.json_config["coolerOn"] else "off"))
         self.set_fan_mode(self.json_config["fanMode"])
         self.set_temperature_until_reach(
             self.json_config["targetTemperature"]
@@ -516,11 +579,12 @@ class Camera:
                         assert False, "Data watcher failed to acquire pipeline's lock"
                     self._data_pipeline.put_nowait(self.get_oldest_image16)
                     self._pipeline_lock.release()
-                    self._data_watcher_stop.set()
+                    self._data_watcher_stop.set() # only get one image
+                    self.logger.info("Andor: mission of data watch finish, start to stop automaticly")
         # stop watch (stop andor acquisition if needed and log/warn)
         if _error_codes[self.get_status()] == "DRV_ACQUIRING": # still in acquiring
             self.abort_acquisition()
-            self.logger.info("Acquisition aborted")
+            self.logger.info("Andor: Acquisition aborted")
         self._data_watcher_working.clear()
 
     def _watch_temp(self):
@@ -545,7 +609,7 @@ class Camera:
                 )
             # log
             self.logger.info(
-                "current temperature: %.2f, current status: %s" % (cur_temp, cooling_status)
+                "Andor: current temperature: %.2f, current status: %s" % (cur_temp, cooling_status)
             )
         # stop watch
         warnings.warn(
