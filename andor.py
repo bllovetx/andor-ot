@@ -238,15 +238,21 @@ class Camera:
         :return: camera specified by serial number if found
         :rtype: Camera
         """  
-        global _andor_logger  
+        global _andor_logger
+
+        # load json to get target serial number and dll/ini file path
+        temp_json: JSONObject = cls._load_config_from_json()
+        target_serial_number: int = temp_json["serialNumber"] # TODO:(xzqZeng@gmail) check int or str
+        dll_path: str = temp_json["dllPath"]  
+        ini_path: str = temp_json["iniPath"]
+
+        # load dll
+        load_dll(dll_path)
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
+
         # get available camera
         available_cameras_number: int = get_available_cameras()
         _andor_logger.info(f"Andor: {available_cameras_number} cameras available now.")
-
-        # load json to get target serial number
-        temp_json: JSONObject = cls._load_config_from_json()
-        target_serial_number: int = temp_json["serialNumber"] # TODO:(xzqZeng@gmail) check int or str
 
         # traverse to check
         serial_number_list = []
@@ -255,6 +261,7 @@ class Camera:
             AndorError.check(_dll.GetCameraHandle(camera_index, byref(c_temp_handle)))
             temp_handle = c_temp_handle.value
             temp_camera = Camera(temp_handle)
+            temp_camera.initialize(ini_path)
             temp_serial_number = temp_camera.get_camera_serial_number() 
             # if found: return camera, log/check model
             if temp_serial_number == target_serial_number:
@@ -488,6 +495,9 @@ class Camera:
         ## store configurations that used frequently
         self.read_out_mode = self.json_config["readoutMode"]
         self.acquisition_mode = self.json_config["acquisitionMode"]
+        # sdk should be initialized before all dll class member function is called
+        self.initialize(self.json_config["iniPath"])
+        # config depend on model type
         # TODO:(xzqZeng@gmail.com): add other model
         assert self.json_config["productModel"] == "iXon Ultra 888", \
             "Currently only iXon Ultra 888 is supported to config with json"
