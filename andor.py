@@ -506,13 +506,19 @@ class Camera:
 
     def _iXon_ultra_888_config(self):
         # check camera
-        print("please check: - model type is " + self.get_head_model() + \
+        print("please check: - model type is " + str(self.get_head_model()) + \
             ", serial number is " + str(self.get_camera_serial_number()))
         
         # open cooler and fan
+        cooler_previous_state = "on" if self.is_cooler_on() else "off"
+        self.logger.info("Andor: cooler is " + cooler_previous_state + " before configuration")
+        if not self.json_config["coolerOn"]:
+            warnings.warn("cooler not set to on! check your configuration")
         self.cooler(on=self.json_config["coolerOn"])
         self.logger.info("Andor: cooler " + ("on" if self.json_config["coolerOn"] else "off"))
         self.set_fan_mode(self.json_config["fanMode"])
+        fan_modes = ["full", "low", "off"]
+        self.logger.info("Andor: fan set to " + fan_modes[self.json_config["fanMode"]])
         self.set_temperature_until_reach(
             self.json_config["targetTemperature"]
         )
