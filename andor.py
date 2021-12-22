@@ -583,7 +583,18 @@ class Camera:
             self.set_trigger_mode(1)
         ## TODO:(xzqZeng@gmail.com) add support to more trigger modes
         
-        # set 
+        # set hs & vs speed
+        hs_config = self.json_config["setHSSpeedParameters"]
+        self.set_hs_speed(hs_config["typ"], hs_config["index"])
+        self.set_preamp_gain(hs_config["preAmpGain"])
+        hs_speed = self.get_hs_speeds()
+        self.logger.info(hs_speed)
+
+        vs_config = self.json_config["setVSSpeedParameters"]
+        self.set_vs_amplitude(vs_config["vsAmp"])
+        self.set_vs_speed(vs_config["index"])
+        vs_speed = self.get_vs_speeds()
+        self.logger.info(vs_speed)
 
         ## TODO:(xzqZeng@gmail.com) add more configuration, log info, check configuration 
         
