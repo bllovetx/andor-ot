@@ -1,17 +1,17 @@
 {
-    "dllPath": "",
-    "iniPath": "",
+    "dllPath": "./atmcd64d.dll",
+    "iniPath": "./Detector.ini",
     "productModel": "iXon Ultra 888",
     "serialNumber": 12859,
-    "fanMode": 0,
+    "fanMode": 2,
     "coolerOn": true,
     "targetTemperature": -80,
-    "watchTemperature": true,
+    "watchTemperature": false,
     "tempTolerance": 5,
-    "setTempTimeOut": 10000,
+    "setTempTimeOut": 60,
     "emGainMode": 0,
     "emAdvanced": false,
-    "emGain": 100,
+    "emGain": 1,
     "readoutMode": "Image",
     "readoutParameters": {
         "fullVerticalBining": {
@@ -51,9 +51,9 @@
                 "hbin": 1,
                 "vbin": 1,
                 "hstart": 1,
-                "hend": 1024,
+                "hend": 16,
                 "vstart": 1,
-                "vend": 256
+                "vend": 16
             }
         }
     },
@@ -63,7 +63,7 @@
             "0": "Output TTL low signal to open shutter",
             "1": "Output TTL high signal to open shutter"
         },
-        "mode": 0,
+        "mode": 1,
         "modeList": {
             "0": "Fully Auto",
             "1": "Permanently Open",
@@ -74,12 +74,12 @@
         "closingTime": 1,
         "openingTime": 1
     },
-    "acquisitionMode": "Single Scan",
+    "acquisitionMode": "Run Till Abort",
     "acquisitionParameters": {
         "singleScan": {
             "modeName": "Single Scan",
             "modeId": 1,
-            "exposureTime": 1e-05
+            "exposureTime": 0.03
         },
         "accumulate": {
             "modeName": "Accumulate",
@@ -91,16 +91,16 @@
         "kineticSeries": {
             "modeName": "Kinetic Series",
             "modeId": 3,
-            "exposureTime": 1e-05,
-            "numberOfAccumulations": 3,
-            "accumulateCycleTime": 1.518,
-            "numberInKineticSeries": 4,
-            "kineticCycleTime": 3
+            "exposureTime": 0.03,
+            "numberOfAccumulations": 1,
+            "accumulateCycleTime": 0,
+            "numberInKineticSeries": 10000,
+            "kineticCycleTime": 0
         },
         "runTillAbort": {
             "modeName": "Run Till Abort",
             "modeId": 5,
-            "exposureTime": 1e-05,
+            "exposureTime": 0.03,
             "kineticCycleTime": 0
         }
     },
@@ -121,6 +121,10 @@
         "externalExposure": {
             "modeName": "External Exposure",
             "modeId": 7
+        },
+        "softwareTrigger": {
+            "modeName": "Software Trigger",
+            "modeId": 10
         }
     },
     "setHSSpeedParameters": {
@@ -129,11 +133,13 @@
             "0": "electron multiplication/Conventional(clara)",
             "1": "conventional/Extended NIR mode(clara)"
         },
-        "index": 0
+        "index": 3,
+        "preAmpGain": 1
     },
     "setVSSpeedParameters": {
-        "index": 0
+        "vsAmp": 0,
+        "index": 3
     },
-    "dataWatcherWaitTime": 0.2,
-    "tempWatcherWatiTime": 30
+    "dataWatcherWaitTime": 0,
+    "tempWatcherWaitTime": 30
 }
