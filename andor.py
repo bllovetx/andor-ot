@@ -552,10 +552,23 @@ class Camera:
 
         # set acquisition mode and relative parameters
         if self.acquisition_mode == "Single Scan":
-            self.set_acquisition_mode(1)
+            self.set_acquisition_mode(frames=1)
             self.set_exposure_time(
                 self.json_config["acquisitionParameters"]["singleScan"]["exposureTime"]
             )
+        elif self.acquisition_mode == "Run Till Abort":
+            self.set_acquisition_mode(frames=0)
+            self.set_exposure_time(
+                self.json_config["acquisitionParameters"]["runTillAbort"]["exposureTime"]
+            )
+            self.set_kinetic_cycle_time(
+                self.json_config["acquisitionParameters"]["runTillAbort"]["kineticCycleTime"]
+            )
+        elif self.acquisition_mode == "Kinetic Series":
+            kinetic_config = self.json_config["acquisitionParameters"]["kineticSeries"]
+            self.set_acquisition_mode(frames=kinetic_config["numberInKineticSeries"])
+            self.set_exposure_time(kinetic_config["exposureTime"])
+            
         ## TODO:(xzqZeng@gmail.com) add support to more acquisition modes
 
         # set readout mode and relative parameters
@@ -608,18 +621,33 @@ class Camera:
         # check
         while not self._data_watcher_stop.wait(timeout=self.data_watcher_wait_time):
             # send data from andor to pipeline if available
-            image_index_first, image_index_last = self.get_number_new_images()
-            image_in_circular_buffer = image_index_last - image_index_first
-            if self.acquisition_mode == "Single Scan": # can use dict of function instead
-                if image_in_circular_buffer:
+            new_img_available = self._new_image_available()
+            if self.acquisition_mode == "Kinetic Series":
+                if new_img_available:
                     if not self._pipeline_lock.acquire(timeout=3):
                         assert False, "Data watcher failed to acquire pipeline's lock"
-                    self._data_pipeline.put_nowait(self.get_oldest_image16)
+                    self._data_pipeline.put_nowait(self.get_oldest_image16())
+                    self._pipeline_lock.release()
+            elif self.acquisition_mode == "Run Till Abort": #TESTING
+                if new_img_available:
+                    if not self._pipeline_lock.acquire(timeout=3):
+                        assert False, "Data watcher failed to acquire pipeline's lock"
+                    self._data_pipeline.put_nowait(self.get_oldest_image16())
+                    self._pipeline_lock.release()
+            elif self.acquisition_mode == "Single Scan": # can use dict of function instead
+                if new_img_available:
+                    if not self._pipeline_lock.acquire(timeout=3):
+                        assert False, "Data watcher failed to acquire pipeline's lock"
+                    self._data_pipeline.put_nowait(self.get_oldest_image16())
                     self._pipeline_lock.release()
                     self._data_watcher_stop.set() # only get one image
                     self.logger.info("Andor: mission of data watch finish, start to stop automaticly")
+            else:
+                # TODO:(xzqZeng@gmail.com)
+                assert False, "acquisition mode not support currently"
         # stop watch (stop andor acquisition if needed and log/warn)
         if _error_codes[self.get_status()] == "DRV_ACQUIRING": # still in acquiring
+            # check wether change to try
             self.abort_acquisition()
             self.logger.info("Andor: Acquisition aborted")
         self._data_watcher_working.clear()
@@ -666,6 +694,18 @@ class Camera:
         # set event(working)
         self._data_watcher_working.clear()
 
+    def _new_image_available(self):
+        self._make_current()
+        first, last = c_long(), c_long()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
+        error_code = _dll.GetNumberNewImages(byref(first), byref(last))
+        # logging.info(first.value)
+        # logging.info(last.value)
+        # logging.info(error_code)
+        if error_code == 20024:
+            return False
+        AndorError.check(error_code)
+        return True
 
     # # Function loaded from dll
 
@@ -1091,13 +1131,13 @@ class Camera:
                 AndorError.check(_dll.GetHSSpeed(channel, 0, i, byref(speed)))
                 yield speed.value
 
-    def set_hs_speed(self, speed):
+    def set_hs_speed(self, typ, speed):
         if isinstance(speed, float):
             speeds = self.get_hs_speeds(self.get_adc_channel())
             speed = self._best_index(speeds, speed)
         self._make_current()
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
-        AndorError.check(_dll.SetHSSpeed(0, speed))
+        AndorError.check(_dll.SetHSSpeed(typ, speed))
 
     def set_kinetic_cycle_time(self, time):
         self._make_current()
@@ -1127,6 +1167,12 @@ class Camera:
         self._make_current()
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetTriggerMode(mode))
+
+    def send_software_trigger(self):
+        self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
+        AndorError.check(_dll.SendSoftwareTrigger())
+        
 
     def set_fast_ext_trigger(self, mode):
         self._make_current()
