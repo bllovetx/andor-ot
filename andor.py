@@ -288,7 +288,7 @@ class Camera:
             if self.with_json: # get time out from json
                 temp_time_out = self.json_config["setTempTimeOut"]
             else: # set to default value and warning
-                temp_time_out = 10000
+                temp_time_out = 1800
                 warnings.warn("set temperature time out is not found, using " + str(temp_time_out))
 
         # check cooler and target temperature
@@ -306,20 +306,23 @@ class Camera:
         self.set_temperature(target_temp)
         start_time: float = time.time()
         cur_temp, cooling_status = self.get_temperature_f()
-        while cooling_status != "DRV_TEMP_STABILIZED" and (time.time() - start_time < temp_time_out):
+        while (
+            abs(cur_temp - target_temp) > self.json_config["tempTolerance"] 
+            and (time.time() - start_time < temp_time_out)
+        ):
             time.sleep(5)
             cur_temp, cooling_status = self.get_temperature_f()
             self.logger.info("Andor: cooling: current temperature: %.2f, current status: %s" % (cur_temp, cooling_status))
         if cooling_status != "DRV_TEMP_STABILIZED": 
-            # time out
+            # not stabilized
             warnings.warn(
-                "set temperature time out! current temperature: %.2f, current status: %s" 
+                "temperature not stabilized! current temperature: %.2f, current status: %s" 
                 % (cur_temp, cooling_status)
             )
         if abs(cur_temp - target_temp) > self.json_config["tempTolerance"]: 
-            # out of tolerance
+            # time out, out of tolerance
             warnings.warn(
-                "temperature out of tolerance! "
+                "cooling time out, temperature out of tolerance! "
                 "current temperature: %.2f, current status: %s" 
                 % (cur_temp, cooling_status)
             )
@@ -619,7 +622,7 @@ class Camera:
                     "system temperature not stabilized! current temperature: %.2f, current status: %s" 
                     % (cur_temp, cooling_status)
                 )
-            if abs(cur_temp - self.target) > self.json_config["tempTolerance"]: 
+            if abs(cur_temp - self.json_config["targetTemperature"]) > self.json_config["tempTolerance"]: 
                 # out of tolerance
                 warnings.warn(
                     "temperature out of tolerance! "
@@ -628,7 +631,7 @@ class Camera:
                 )
             # log
             self.logger.info(
-                "Andor: current temperature: %.2f, current status: %s" % (cur_temp, cooling_status)
+                "Andor temp watcher: current temperature: %.2f, current status: %s" % (cur_temp, cooling_status)
             )
         # stop watch
         warnings.warn(
