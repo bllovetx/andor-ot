@@ -348,9 +348,9 @@ class Camera:
             return
         # close threads if used and working
         if self.using_threading:
-            if self._data_watcher_working.set():
+            if self._data_watcher_working.is_set():
                 self.stop_data_watcher()
-            if self._temp_watcher_working.set():
+            if self._temp_watcher_working.is_set():
                 self._stop_temp_watcher()
         # config before _config_according_to_json
         self.data_watcher_wait_time: float = self.json_config["dataWatcherWaitTime"] if self.with_json else 0.2 # s
@@ -363,9 +363,9 @@ class Camera:
         assert False, "stop function not checked"
         # close threads if used
         if self.using_threading:
-            if self._data_watcher_working.set():
+            if self._data_watcher_working.is_set():
                 self.stop_data_watcher()
-            if self._temp_watcher_working.set():
+            if self._temp_watcher_working.is_set():
                 self._stop_temp_watcher()
             
         # TODO:(xzqZeng@gmail.com) set temp (and wait)
@@ -413,6 +413,7 @@ class Camera:
         self.start_acquisition()
         # start data watcher
         self._data_watcher = threading.Thread(target=self._watch_data, daemon=True)
+        self._data_watcher.start()
 
     def get_data_from_pipeline(self) -> str | None:
         """get_data_from_pipeline get data from pipeline managed by data watcher.
@@ -527,6 +528,7 @@ class Camera:
             # start temp watcher
             self._temp_watcher_stop.clear()
             self._temp_watcher = threading.Thread(target=self._watch_temp, daemon=True)
+            self._temp_watcher.start()
         else: 
             # warning
             warnings.warn("temp watcher not used!")
