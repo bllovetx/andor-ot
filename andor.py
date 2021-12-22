@@ -547,7 +547,8 @@ class Camera:
         else:
             assert em_gain <= 300, "enable em advanced feature to use large em gain"
         self.set_em_advanced(1 if em_adv else 0)
-        self.set_em_gain_mode(em_gain_mode)
+        # self.set_em_gain_mode(em_gain_mode) # TODO: NEED CHECK
+        self.set_emccd_gain(em_gain)
             
 
         # set acquisition mode and relative parameters
