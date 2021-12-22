@@ -354,13 +354,12 @@ class Camera:
                 self._stop_temp_watcher()
         # config before _config_according_to_json
         self.data_watcher_wait_time: float = self.json_config["dataWatcherWaitTime"] if self.with_json else 0.2 # s
-        self.temp_watcher_wait_time: float = self.json_config["tempWatcherWaitTime"] if self.with_json else 30
+        self.temp_watcher_wait_time: float = self.json_config["tempWatcherWaitTime"] if self.with_json else 30 # s
         # replace json and config according to json
         self.json_config = temp_json
         self._config_according_to_json()
 
     def stop_camera(self):
-        assert False, "stop function not checked"
         # close threads if used
         if self.using_threading:
             if self._data_watcher_working.is_set():
