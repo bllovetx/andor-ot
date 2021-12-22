@@ -1,4 +1,4 @@
-"""This python api used by OT, USTC base on andorpy(https://github.com/quartiq/andorpy)
+"""This's python api used by OT, USTC base on andorpy(https://github.com/quartiq/andorpy)
 
 All parameters should be configured in AndorConfig.json in the same dir with this file.
 
@@ -233,7 +233,7 @@ class Camera:
         with serial number from json. 'with_json' is a must and by default 'using_threading'
         is enabled.
 
-        :param using_threading: whether to use threading, see __init__ for detail, defaults to True
+        :param using_threading: whether to use threading, see __init__ for detail, defaults to True (False not tested currently)
         :type using_threading: bool, optional
         :return: camera specified by serial number if found
         :rtype: Camera
@@ -376,6 +376,7 @@ class Camera:
         data watcher with 'Camera.stop_data_watcher'
 
         To get data from pipeline managed by data watcher, call 'Camera.get_data_from_pipeline'
+        # NOTE: circular buffer will be cleared right after calling this
         """        
         # check setings
         if not self.using_threading:
@@ -466,7 +467,7 @@ class Camera:
         """_load_config_from_json Load json configuration from this_dir/AndorConfig.json
 
         :return: JSON configuration
-        :rtype: JSON
+        :rtype: JSONObject
         """
         global _this_dir, _andor_logger
         json_file_path = _this_dir + "\\AndorConfig.json"
@@ -960,6 +961,9 @@ class Camera:
         return state.value
 
     def start_acquisition(self):
+        """
+        NOTE: circular buffer will be cleared by hardware right after this
+        """
         self._make_current()
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.StartAcquisition())
@@ -1094,7 +1098,29 @@ class Camera:
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetFastExtTrigger(mode))
 
-    def get_number_new_images(self):
+    def get_number_new_images(self) -> Tuple[int, int]:
+        """get_number_new_images This function will return information on the number of new images (i.e. images which have 
+        not yet been retrieved) in the circular buffer. This information can be used with 
+        GetImages to retrieve a series of the latest images. If any images are overwritten in the 
+        circular buffer they can no longer be retrieved and the information returned will treat 
+        overwritten images as having been retrieved.
+
+        :return: 
+            - first: returns the index of the first available image in the circular buffer.
+            - last: returns the index of the last available image in the circular buffer.
+            NOTE: - as image accumulate in circular buffer without reading:
+                    get_number_new_images returns:
+                    0, 0(no image) along with andor error code 20024(NO NEW DATA)
+                    1, 1(one image)
+                    1, 2(two images)
+                    1, 3(three images)
+                    etc.
+                    - get oldest image result in
+                    2, 3(two left)
+                    3, 3(one left)
+                    3, 3(no image) along with andor error code 20024(NO NEW DATA)
+        :rtype: Tuple[int, int]
+        """
         self._make_current()
         first, last = c_long(), c_long()
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
