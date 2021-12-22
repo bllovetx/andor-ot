@@ -581,6 +581,10 @@ class Camera:
         # set trigger mode
         if self.json_config["triggerMode"] == "External":
             self.set_trigger_mode(1)
+        elif self.json_config["triggerMode"] == "Internal":
+            self.set_trigger_mode(0)
+        elif self.json_config["triggerMode"] == "Software Trigger":
+            self.set_trigger_mode(10)
         ## TODO:(xzqZeng@gmail.com) add support to more trigger modes
         
         # set hs & vs speed
