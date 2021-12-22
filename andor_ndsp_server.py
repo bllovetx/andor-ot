@@ -4,7 +4,7 @@ import logging
 
 def main():
     logging.basicConfig(
-        level=logging.INFO, filename="./logs/mainlog",
+        level=logging.INFO, filename="./logs/serverlog",
         format='%(asctime)s.%(msec)03d %(levelname)s %(module)s - %(funcName)s: %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
