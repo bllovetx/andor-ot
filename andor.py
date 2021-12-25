@@ -1190,7 +1190,11 @@ class Camera:
     def set_count_convert_mode(self, mode: int):
         self._make_current()
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
-        AndorError.check(_dll.SetCountConvertMode(mode))
+        temp_error_code = _dll.SetCountConvertMode(mode)
+        if temp_error_code == 20992:
+            warnings.warn("Count Convert mode not available with current settings, not applied")
+            return
+        AndorError.check(temp_error_code)
 
     def set_count_convert_wavelength(self, wl: float):
         self._make_current()
