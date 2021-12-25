@@ -618,6 +618,9 @@ class Camera:
         vs_speed = self.get_vs_speeds()
         self.logger.info(vs_speed)
 
+        # set count convert
+        self.set_count_convert_mode(self.json_config["countConvertMode"])
+        self.set_count_convert_wavelength(self.json_config["countConvertWavelength"])
         ## TODO:(xzqZeng@gmail.com) add more configuration, log info, check configuration 
         
     def _watch_data(self):
@@ -1183,6 +1186,16 @@ class Camera:
         self._make_current()
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
         AndorError.check(_dll.SetFastExtTrigger(mode))
+
+    def set_count_convert_mode(self, mode: int):
+        self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
+        AndorError.check(_dll.SetCountConvertMode(mode))
+
+    def set_count_convert_wavelength(self, wl: float):
+        self._make_current()
+        assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
+        AndorError.check(_dll.SetCountConvertWavelength(wl))
 
     def get_number_new_images(self) -> Tuple[int, int]:
         """get_number_new_images This function will return information on the number of new images (i.e. images which have 

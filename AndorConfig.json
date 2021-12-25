@@ -141,5 +141,12 @@
         "index": 3
     },
     "dataWatcherWaitTime": 0,
-    "tempWatcherWaitTime": 30
+    "tempWatcherWaitTime": 30,
+    "countConvertMode": 2,
+    "countConvertModeList": {
+        "Counts": 0,
+        "Electrons": 1,
+        "Photons": 2
+    },
+    "countConvertWavelength": 780
 }
