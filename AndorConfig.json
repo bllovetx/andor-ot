@@ -8,7 +8,7 @@
     "targetTemperature": -80,
     "watchTemperature": false,
     "tempTolerance": 5,
-    "setTempTimeOut": 60,
+    "setTempTimeOut": 1800,
     "emGainMode": 0,
     "emAdvanced": false,
     "emGain": 1,
