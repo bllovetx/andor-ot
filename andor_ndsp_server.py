@@ -11,7 +11,7 @@ def main():
     )
     # start server
     # TODO: change ip to current server's ip, NOTE don't use ::1(localhost)
-    simple_server_loop({"emccd": ad.by_serial_number()}, "192.168.50.187", 3249)
+    simple_server_loop({"emccd": ad.Camera.by_serial_number()}, "192.168.50.187", 3249)
 
 
 if __name__ == "__main__":
