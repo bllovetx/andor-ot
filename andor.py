@@ -552,12 +552,12 @@ class Camera:
             )
         else:
             assert em_gain <= 300, "enable em advanced feature to use large em gain"
+        self.set_em_gain_mode(em_gain_mode) # TODO: NEED CHECK
         self.set_em_advanced(1 if em_adv else 0)
         # Mode  0: The EM Gain is controlled by DAC settings in the range 0-255. Default mode. 
         #       1: The EM Gain is controlled by DAC settings in the range 0-4095. 
         #       2: Linear mode. 
         #       3: Real EM gain
-        self.set_em_gain_mode(em_gain_mode) # TODO: NEED CHECK
         self.set_emccd_gain(em_gain)
             
 
