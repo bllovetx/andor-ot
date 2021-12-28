@@ -593,6 +593,8 @@ class Camera:
                     set_image_paras["vstart"], set_image_paras["vend"]
                 )
             )
+            self.image_width = 1 + set_image_paras["hend"] - set_image_paras["hstart"]
+            self.image_height = 1 + set_image_paras["vend"] - set_image_paras["vstart"] 
         ## TODO:(xzqZeng@gmail.com) add support to more readout modes
 
         # set shutter mode
