@@ -17,8 +17,7 @@ There exist multiple ways to access the instance from remote client:
          "emccd": {
                  "type": "controller",
                  "host": "[ip]",
-                 "port": 3249,
-                 "command": "python /abs/path/to/aqctl_hello.py -p {port}"
+                 "port": 3249
          },
    })
    ```
@@ -93,3 +92,4 @@ see comment in andor.py
    2, 3(two left)
    3, 3(one left)
    3, 3(no image) along with andor error code 20024(NO NEW DATA)
+4. HSspeed is indexed from large to small
