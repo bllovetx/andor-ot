@@ -1207,7 +1207,7 @@ class Camera:
     def set_count_convert_wavelength(self, wl: float):
         self._make_current()
         assert _dll is not None, "_dll not initialized!" # In case of _dll = None, can also use "# type: ignore" but not recommended
-        AndorError.check(_dll.SetCountConvertWavelength(wl))
+        AndorError.check(_dll.SetCountConvertWavelength(c_float(wl)))
 
     def get_number_new_images(self) -> Tuple[int, int]:
         """get_number_new_images This function will return information on the number of new images (i.e. images which have 
