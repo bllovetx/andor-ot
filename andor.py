@@ -11,6 +11,7 @@ from ctypes import (Structure, c_ulong, c_long, c_int, c_uint, c_float,
                     byref, oledll, create_string_buffer)
 import json
 import logging
+import numpy as np
 import os
 from queue import Queue
 # import sys
@@ -417,11 +418,11 @@ class Camera:
         self._data_watcher = threading.Thread(target=self._watch_data, daemon=True)
         self._data_watcher.start()
 
-    def get_data_from_pipeline(self) -> str | None:
+    def get_data_from_pipeline(self) -> np.ndarray | None:
         """get_data_from_pipeline get data from pipeline managed by data watcher.
 
         :return: newest data not get by user, None if no data available in pipeline
-        :rtype: str | None
+        :rtype: np.Array | None
         """        
         # check setings
         if not self.using_threading:
@@ -434,7 +435,12 @@ class Camera:
         # wait for pipeline to be available, raise assertion fail if time out
         if not self._pipeline_lock.acquire(timeout=3):
             assert False, "user failed to acquire pipeline's lock"
-        temp_data: str | None = None if self._data_pipeline.empty() else self._data_pipeline.get_nowait()
+        temp_data: np.ndarray | None = None if self._data_pipeline.empty() else \
+            np.fromstring(
+                self._data_pipeline.get_nowait(), dtype=np.int16
+            ).reshape(
+                self.image_width, self.image_height
+            )
         self._pipeline_lock.release()
         return temp_data
 
