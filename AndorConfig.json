@@ -6,12 +6,12 @@
     "fanMode": 2,
     "coolerOn": true,
     "targetTemperature": -80,
-    "watchTemperature": false,
+    "watchTemperature": true,
     "tempTolerance": 5,
-    "setTempTimeOut": 1800,
-    "emGainMode": 0,
-    "emAdvanced": false,
-    "emGain": 1,
+    "setTempTimeOut": 60,
+    "emGainMode": 3,
+    "emAdvanced": true,
+    "emGain": 1000,
     "readoutMode": "Image",
     "readoutParameters": {
         "fullVerticalBining": {
@@ -50,10 +50,10 @@
             "setImageParameters": {
                 "hbin": 1,
                 "vbin": 1,
-                "hstart": 1,
-                "hend": 16,
-                "vstart": 1,
-                "vend": 16
+                "hstart": 540,
+                "hend": 560,
+                "vstart": 175,
+                "vend": 195
             }
         }
     },
@@ -79,7 +79,7 @@
         "singleScan": {
             "modeName": "Single Scan",
             "modeId": 1,
-            "exposureTime": 0.03
+            "exposureTime": 0.04
         },
         "accumulate": {
             "modeName": "Accumulate",
@@ -91,7 +91,7 @@
         "kineticSeries": {
             "modeName": "Kinetic Series",
             "modeId": 3,
-            "exposureTime": 0.03,
+            "exposureTime": 0.04,
             "numberOfAccumulations": 1,
             "accumulateCycleTime": 0,
             "numberInKineticSeries": 10000,
@@ -100,7 +100,7 @@
         "runTillAbort": {
             "modeName": "Run Till Abort",
             "modeId": 5,
-            "exposureTime": 0.03,
+            "exposureTime": 0.04,
             "kineticCycleTime": 0
         }
     },
@@ -133,7 +133,7 @@
             "0": "electron multiplication/Conventional(clara)",
             "1": "conventional/Extended NIR mode(clara)"
         },
-        "index": 3,
+        "index": 0,
         "preAmpGain": 1
     },
     "setVSSpeedParameters": {
@@ -148,5 +148,5 @@
         "Electrons": 1,
         "Photons": 2
     },
-    "countConvertWavelength": 780
+    "countConvertWavelength": 780.0
 }
