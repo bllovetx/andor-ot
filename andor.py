@@ -704,11 +704,11 @@ class Camera:
         accessed by user
         """        
         # set event(stop)
-        self._data_watcher_stop.set()
+        self._temp_watcher_stop.set()
         # join
-        self._data_watcher.join()
+        self._temp_watcher.join()
         # set event(working)
-        self._data_watcher_working.clear()
+        self._temp_watcher_working.clear()
 
     def _new_image_available(self):
         self._make_current()
